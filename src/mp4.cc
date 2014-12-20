@@ -64,6 +64,8 @@ TSRemapDoRemap(void* ih, TSHttpTxn rh, TSRemapRequestInfo *rri)
         return TSREMAP_NO_REMAP;
     }
 
+    printf("start = %d\n", start);
+
     mc = new Mp4Context(start);
     contp = TSContCreate(mp4_handler, NULL);
     TSContDataSet(contp, mc);
@@ -145,6 +147,7 @@ mp4_cache_lookup_complete(Mp4Context *mc, TSHttpTxn txnp)
     if (n <= 0)
         goto release;
 
+    mc->cl = n;
     mp4_add_transform(mc, txnp);
 
 release:
@@ -286,7 +289,6 @@ mp4_transform_handler(TSCont contp, Mp4Context *mc)
         if (ret < 0) {
             mtc->output.vio = TSVConnWrite(output_conn, contp, mtc->output.reader, mc->cl);
             mtc->raw_transform = true;
-            printf("********* fk here ********\n");
 
         } else {
             mtc->output.vio = TSVConnWrite(output_conn, contp, mtc->output.reader, mtc->content_length);
