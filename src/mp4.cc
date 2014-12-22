@@ -49,21 +49,13 @@ TSRemapDoRemap(void* ih, TSHttpTxn rh, TSRemapRequestInfo *rri)
     char                buf[1024];
     int                 buf_len;
     int                 left, right;
-    TSMLoc              ae_field;
+    TSMLoc              ae_field, range_field;
     TSCont              contp;
     Mp4Context          *mc;
 
     method = TSHttpHdrMethodGet(rri->requestBufp, rri->requestHdrp, &method_len);
     if (method != TS_HTTP_METHOD_GET) {
         return TSREMAP_NO_REMAP;
-    }
-
-    // remove Accept-Encoding
-    ae_field = TSMimeHdrFieldFind(rri->requestBufp, rri->requestHdrp,
-                                  TS_MIME_FIELD_ACCEPT_ENCODING, TS_MIME_LEN_ACCEPT_ENCODING);
-    if (ae_field) {
-        TSMimeHdrFieldDestroy(rri->requestBufp, rri->requestHdrp, ae_field);
-        TSHandleMLocRelease(rri->requestBufp, rri->requestHdrp, ae_field);
     }
 
     start = 0;
@@ -94,6 +86,22 @@ TSRemapDoRemap(void* ih, TSHttpTxn rh, TSRemapRequestInfo *rri)
 
     buf_len = sprintf(buf, "%.*s%.*s", left, query, right, query+query_len-right);
     TSUrlHttpQuerySet(rri->requestBufp, rri->requestUrl, buf, buf_len);
+
+    // remove Accept-Encoding
+    ae_field = TSMimeHdrFieldFind(rri->requestBufp, rri->requestHdrp,
+                                  TS_MIME_FIELD_ACCEPT_ENCODING, TS_MIME_LEN_ACCEPT_ENCODING);
+    if (ae_field) {
+        TSMimeHdrFieldDestroy(rri->requestBufp, rri->requestHdrp, ae_field);
+        TSHandleMLocRelease(rri->requestBufp, rri->requestHdrp, ae_field);
+    }
+
+    // remove Range
+    range_field = TSMimeHdrFieldFind(rri->requestBufp, rri->requestHdrp,
+                                  TS_MIME_FIELD_RANGE, TS_MIME_LEN_RANGE);
+    if (range_field) {
+        TSMimeHdrFieldDestroy(rri->requestBufp, rri->requestHdrp, range_field);
+        TSHandleMLocRelease(rri->requestBufp, rri->requestHdrp, range_field);
+    }
 
     mc = new Mp4Context(start);
     contp = TSContCreate(mp4_handler, NULL);
@@ -217,6 +225,7 @@ mp4_read_response(Mp4Context *mc, TSHttpTxn txnp)
     if (n <= 0)
         goto release;
 
+    mc->cl = n;
     mp4_add_transform(mc, txnp);
 
 release:
