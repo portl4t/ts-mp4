@@ -6,7 +6,6 @@ char * ts_arg(const char *param, size_t param_len, const char *key, size_t key_l
 static int mp4_handler(TSCont contp, TSEvent event, void *edata);
 static void mp4_cache_lookup_complete(Mp4Context *mc, TSHttpTxn txnp);
 static void mp4_read_response(Mp4Context *mc, TSHttpTxn txnp);
-static void mp4_send_response(Mp4Context *mc, TSHttpTxn txnp);
 static void mp4_add_transform(Mp4Context *mc, TSHttpTxn txnp);
 static int mp4_transform_entry(TSCont contp, TSEvent event, void *edata);
 static int mp4_transform_handler(TSCont contp, Mp4Context *mc);
@@ -109,7 +108,6 @@ TSRemapDoRemap(void* ih, TSHttpTxn rh, TSRemapRequestInfo *rri)
 
     TSHttpTxnHookAdd(rh, TS_HTTP_CACHE_LOOKUP_COMPLETE_HOOK, contp);
     TSHttpTxnHookAdd(rh, TS_HTTP_READ_RESPONSE_HDR_HOOK, contp);
-    TSHttpTxnHookAdd(rh, TS_HTTP_SEND_RESPONSE_HDR_HOOK, contp);
     TSHttpTxnHookAdd(rh, TS_HTTP_TXN_CLOSE_HOOK, contp);
     return TSREMAP_NO_REMAP;
 }
@@ -131,10 +129,6 @@ mp4_handler(TSCont contp, TSEvent event, void *edata)
 
         case TS_EVENT_HTTP_READ_RESPONSE_HDR:
             mp4_read_response(mc, txnp);
-            break;
-
-        case TS_EVENT_HTTP_SEND_RESPONSE_HDR:
-            mp4_send_response(mc, txnp);
             break;
 
         case TS_EVENT_HTTP_TXN_CLOSE:
@@ -229,27 +223,6 @@ mp4_read_response(Mp4Context *mc, TSHttpTxn txnp)
     mp4_add_transform(mc, txnp);
 
 release:
-
-    TSHandleMLocRelease(bufp, TS_NULL_MLOC, hdrp);
-}
-
-static void
-mp4_send_response(Mp4Context *mc, TSHttpTxn txnp)
-{
-    TSMBuffer       bufp;
-    TSMLoc          hdrp;
-    TSMLoc          cc_field;
-
-    if (TSHttpTxnClientRespGet(txnp, &bufp, &hdrp) != TS_SUCCESS) {
-        TSError("[%s] could not get request os data", __FUNCTION__);
-        return;
-    }
-
-    cc_field = TSMimeHdrFieldFind(bufp, hdrp, TS_MIME_FIELD_CACHE_CONTROL, TS_MIME_LEN_CACHE_CONTROL);
-    if (cc_field) {
-        TSMimeHdrFieldDestroy(bufp, hdrp, cc_field);
-        TSHandleMLocRelease(bufp, hdrp, cc_field);
-    }
 
     TSHandleMLocRelease(bufp, TS_NULL_MLOC, hdrp);
 }
