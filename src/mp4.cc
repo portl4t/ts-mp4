@@ -1,9 +1,12 @@
 
 #include "mp4_common.h"
 
+
+char * ts_arg(const char *param, size_t param_len, const char *key, size_t key_len, size_t *val_len);
 static int mp4_handler(TSCont contp, TSEvent event, void *edata);
 static void mp4_cache_lookup_complete(Mp4Context *mc, TSHttpTxn txnp);
 static void mp4_read_response(Mp4Context *mc, TSHttpTxn txnp);
+static void mp4_send_response(Mp4Context *mc, TSHttpTxn txnp);
 static void mp4_add_transform(Mp4Context *mc, TSHttpTxn txnp);
 static int mp4_transform_entry(TSCont contp, TSEvent event, void *edata);
 static int mp4_transform_handler(TSCont contp, Mp4Context *mc);
@@ -40,8 +43,13 @@ TSRemapDoRemap(void* ih, TSHttpTxn rh, TSRemapRequestInfo *rri)
 {
     const char          *method, *query;
     int                 method_len, query_len;
-    const char          *ptr;
+    size_t              val_len;
+    const char          *val;
     int                 ret, start;
+    char                buf[1024];
+    int                 buf_len;
+    int                 left, right;
+    TSMLoc              ae_field;
     TSCont              contp;
     Mp4Context          *mc;
 
@@ -50,12 +58,20 @@ TSRemapDoRemap(void* ih, TSHttpTxn rh, TSRemapRequestInfo *rri)
         return TSREMAP_NO_REMAP;
     }
 
+    // remove Accept-Encoding
+    ae_field = TSMimeHdrFieldFind(rri->requestBufp, rri->requestHdrp,
+                                  TS_MIME_FIELD_ACCEPT_ENCODING, TS_MIME_LEN_ACCEPT_ENCODING);
+    if (ae_field) {
+        TSMimeHdrFieldDestroy(rri->requestBufp, rri->requestHdrp, ae_field);
+        TSHandleMLocRelease(rri->requestBufp, rri->requestHdrp, ae_field);
+    }
+
     start = 0;
     query = TSUrlHttpQueryGet(rri->requestBufp, rri->requestUrl, &query_len);
 
-    ptr = (char*)memmem(query, query_len, "start=", sizeof("start=")-1);
-    if (ptr != NULL) {
-        ret = sscanf(ptr, "start=%d", &start);
+    val = ts_arg(query, query_len, "start", sizeof("start")-1, &val_len);
+    if (val != NULL) {
+        ret = sscanf(val, "%d", &start);
         if (ret != 1)
             start = 0;
     }
@@ -64,7 +80,20 @@ TSRemapDoRemap(void* ih, TSHttpTxn rh, TSRemapRequestInfo *rri)
         return TSREMAP_NO_REMAP;
     }
 
-    printf("start = %d\n", start);
+    // reset args
+    left = val - sizeof("start") - query;
+    right = query + query_len - val - val_len;
+
+    if (left > 0) {
+        left--;
+    }
+
+    if (left == 0 && right > 0) {
+        right--;
+    }
+
+    buf_len = sprintf(buf, "%.*s%.*s", left, query, right, query+query_len-right);
+    TSUrlHttpQuerySet(rri->requestBufp, rri->requestUrl, buf, buf_len);
 
     mc = new Mp4Context(start);
     contp = TSContCreate(mp4_handler, NULL);
@@ -72,6 +101,7 @@ TSRemapDoRemap(void* ih, TSHttpTxn rh, TSRemapRequestInfo *rri)
 
     TSHttpTxnHookAdd(rh, TS_HTTP_CACHE_LOOKUP_COMPLETE_HOOK, contp);
     TSHttpTxnHookAdd(rh, TS_HTTP_READ_RESPONSE_HDR_HOOK, contp);
+    TSHttpTxnHookAdd(rh, TS_HTTP_SEND_RESPONSE_HDR_HOOK, contp);
     TSHttpTxnHookAdd(rh, TS_HTTP_TXN_CLOSE_HOOK, contp);
     return TSREMAP_NO_REMAP;
 }
@@ -93,6 +123,10 @@ mp4_handler(TSCont contp, TSEvent event, void *edata)
 
         case TS_EVENT_HTTP_READ_RESPONSE_HDR:
             mp4_read_response(mc, txnp);
+            break;
+
+        case TS_EVENT_HTTP_SEND_RESPONSE_HDR:
+            mp4_send_response(mc, txnp);
             break;
 
         case TS_EVENT_HTTP_TXN_CLOSE:
@@ -186,6 +220,27 @@ mp4_read_response(Mp4Context *mc, TSHttpTxn txnp)
     mp4_add_transform(mc, txnp);
 
 release:
+
+    TSHandleMLocRelease(bufp, TS_NULL_MLOC, hdrp);
+}
+
+static void
+mp4_send_response(Mp4Context *mc, TSHttpTxn txnp)
+{
+    TSMBuffer       bufp;
+    TSMLoc          hdrp;
+    TSMLoc          cc_field;
+
+    if (TSHttpTxnClientRespGet(txnp, &bufp, &hdrp) != TS_SUCCESS) {
+        TSError("[%s] could not get request os data", __FUNCTION__);
+        return;
+    }
+
+    cc_field = TSMimeHdrFieldFind(bufp, hdrp, TS_MIME_FIELD_CACHE_CONTROL, TS_MIME_LEN_CACHE_CONTROL);
+    if (cc_field) {
+        TSMimeHdrFieldDestroy(bufp, hdrp, cc_field);
+        TSHandleMLocRelease(bufp, hdrp, cc_field);
+    }
 
     TSHandleMLocRelease(bufp, TS_NULL_MLOC, hdrp);
 }
@@ -372,5 +427,44 @@ mp4_parse_meta(Mp4TransformContext *mtc, bool body_complete)
     }
 
     return ret;
+}
+
+char *
+ts_arg(const char *param, size_t param_len, const char *key, size_t key_len, size_t *val_len)
+{
+    const char  *p, *last;
+    const char  *val;
+
+    *val_len = 0;
+
+    if (!param || !param_len)
+        return NULL;
+
+    p = param;
+    last = p + param_len;
+
+    for ( ; p < last; p++) {
+
+        p = (char*)memmem(p, last-p, key, key_len);
+
+        if (p == NULL)
+            return NULL;
+
+        if ((p == param || *(p - 1) == '&') && *(p + key_len) == '=') {
+
+            val = p + key_len + 1;
+
+            p = (char*)memchr(p, '&', last-p);
+
+            if (p == NULL)
+                p = param + param_len;
+
+            *val_len = p - val;
+
+            return (char*)val;
+        }
+    }
+
+    return NULL;
 }
 
