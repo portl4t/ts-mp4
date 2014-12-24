@@ -15,40 +15,9 @@
 
 #include <ts/ts.h>
 
-#define MP4_TRAK_ATOM     0
-#define MP4_TKHD_ATOM     1
-#define MP4_MDIA_ATOM     2
-#define MP4_MDHD_ATOM     3
-#define MP4_HDLR_ATOM     4
-#define MP4_MINF_ATOM     5
-#define MP4_VMHD_ATOM     6
-#define MP4_SMHD_ATOM     7
-#define MP4_DINF_ATOM     8
-#define MP4_STBL_ATOM     9
-#define MP4_STSD_ATOM    10
-#define MP4_STTS_ATOM    11
-#define MP4_STTS_DATA    12
-#define MP4_STSS_ATOM    13
-#define MP4_STSS_DATA    14
-#define MP4_CTTS_ATOM    15
-#define MP4_CTTS_DATA    16
-#define MP4_STSC_ATOM    17
-#define MP4_STSC_CHUNK   18
-#define MP4_STSC_DATA    19
-#define MP4_STSZ_ATOM    20
-#define MP4_STSZ_DATA    21
-#define MP4_STCO_ATOM    22
-#define MP4_STCO_DATA    23
-#define MP4_CO64_ATOM    24
-#define MP4_CO64_DATA    25
-#define MP4_LAST_ATOM    MP4_CO64_DATA
-
-#define MP4_MAX_TRAK_NUM 6
-
+#define MP4_MAX_TRAK_NUM            6
 #define MP4_MAX_BUFFER_SIZE         (10 * 1024 * 1024)
 #define MP4_MIN_BUFFER_SIZE         1024
-#define MP4_MOOV_BUFFER_EXCESS      (4 * 1024)
-#define MP4_MAX_OFF_T_VALUE         9223372036854775807LL
 
 #define mp4_set_atom_name(p, n1, n2, n3, n4)                              \
     ((u_char *) (p))[4] = n1;                                             \
@@ -87,6 +56,37 @@
     ((u_char *) (p))[5] = (u_char) (           (n) >> 16);                \
     ((u_char *) (p))[6] = (u_char) (           (n) >> 8);                 \
     ((u_char *) (p))[7] = (u_char)             (n)
+
+
+typedef enum {
+    MP4_TRAK_ATOM = 0,
+    MP4_TKHD_ATOM,
+    MP4_MDIA_ATOM,
+    MP4_MDHD_ATOM,
+    MP4_HDLR_ATOM,
+    MP4_MINF_ATOM,
+    MP4_VMHD_ATOM,
+    MP4_SMHD_ATOM,
+    MP4_DINF_ATOM,
+    MP4_STBL_ATOM,
+    MP4_STSD_ATOM,
+    MP4_STTS_ATOM,
+    MP4_STTS_DATA,
+    MP4_STSS_ATOM,
+    MP4_STSS_DATA,
+    MP4_CTTS_ATOM,
+    MP4_CTTS_DATA,
+    MP4_STSC_ATOM,
+    MP4_STSC_CHUNK,
+    MP4_STSC_DATA,
+    MP4_STSZ_ATOM,
+    MP4_STSZ_DATA,
+    MP4_STCO_ATOM,
+    MP4_STCO_DATA,
+    MP4_CO64_ATOM,
+    MP4_CO64_DATA,
+    MP4_LAST_ATOM = MP4_CO64_DATA
+} TSMp4AtomID;
 
 
 typedef struct {
