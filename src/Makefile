@@ -1,7 +1,7 @@
 .SUFFIXES: .cc .o .lo
 
 COMPILE = $(CXX) -Wall -D_GNU_SOURCE -D_FILE_OFFSET_BITS=64 -g
-INC_PATH = -Imodules
+INC_PATH =
 LIB_PATH = -L/usr/local/lib
 
 SHARED_OBJS = mp4.lo mp4_meta.lo
