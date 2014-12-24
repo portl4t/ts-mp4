@@ -400,10 +400,12 @@ class Mp4Meta
 {
 public:
     Mp4Meta(): start(0), cl(0), content_length(0), meta_atom_size(0),
-                  meta_reader(NULL), meta_avail(0), wait_next(0), need_size(0), rs(0), rate(0),
+                  meta_avail(0), wait_next(0), need_size(0), rs(0), rate(0),
                   ftyp_size(0), moov_size(0), start_pos(0), timescale(0), trak_num(0),
                   offset(0), meta_complete(false)
     {
+        meta_buffer = TSIOBufferCreate();
+        meta_reader = TSIOBufferReaderAlloc(meta_buffer);
     }
 
     ~Mp4Meta()
@@ -412,6 +414,16 @@ public:
 
         for (i = 0; i < trak_num; i++)
             delete trak_vec[i];
+
+        if (meta_reader) {
+            TSIOBufferReaderFree(meta_reader);
+            meta_reader = NULL;
+        }
+
+        if (meta_buffer) {
+             TSIOBufferDestroy(meta_buffer);
+             meta_buffer = NULL;
+        }
     }
 
     int parse_meta(bool body_complete);
@@ -477,7 +489,9 @@ public:
     int64_t             content_length;         // 重新生成之后的content length
     int64_t             meta_atom_size;
 
-    TSIOBufferReader    meta_reader;            // 传过来的数据, 无需在这里destroy
+    TSIOBuffer          meta_buffer;            // 传过来的数据
+    TSIOBufferReader    meta_reader;
+
     int64_t             meta_avail;
     int64_t             wait_next;
     int64_t             need_size;

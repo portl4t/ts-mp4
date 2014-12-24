@@ -51,7 +51,6 @@ public:
         res_reader = TSIOBufferReaderAlloc(res_buffer);
         dup_reader = TSIOBufferReaderAlloc(res_buffer);
 
-        mm.meta_reader = dup_reader;   // 赋值给Mp4Context, 用于解析
         mm.start = offset * 1000;      // 将跳转时间赋值给Mp4Context, 用于解析
         mm.cl = cl;                    // 将文件长度也设置好
     }

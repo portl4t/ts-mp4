@@ -395,10 +395,27 @@ trans:
 static int
 mp4_parse_meta(Mp4TransformContext *mtc, bool body_complete)
 {
-    int        ret;
-    Mp4Meta    *mm;
+    int                 ret;
+    int64_t             avail, bytes;
+    TSIOBufferBlock     blk;
+    const char          *data;
+    Mp4Meta             *mm;
 
     mm = &mtc->mm;
+
+    avail = TSIOBufferReaderAvail(mtc->dup_reader);
+    blk = TSIOBufferReaderStart(mtc->dup_reader);
+
+    while (blk != NULL) {
+        data = TSIOBufferBlockReadStart(blk, mtc->dup_reader, &bytes);
+        if (bytes > 0) {
+            TSIOBufferWrite(mm->meta_buffer, data, bytes);
+        }
+
+        blk = TSIOBufferBlockNext(blk);
+    }
+
+    TSIOBufferReaderConsume(mtc->dup_reader, avail);
 
     ret = mm->parse_meta(body_complete);
 

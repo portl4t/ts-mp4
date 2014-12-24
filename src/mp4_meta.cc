@@ -60,7 +60,6 @@ int
 Mp4Meta::parse_meta(bool body_complete)
 {
     int             ret, rc;
-//    int64_t         haveto;
 
     meta_avail = TSIOBufferReaderAvail(meta_reader);
 
@@ -69,8 +68,6 @@ Mp4Meta::parse_meta(bool body_complete)
         TSIOBufferReaderConsume(meta_reader, wait_next);
         wait_next = 0;
     }
-
-//    haveto = need_size > MP4_MIN_BUFFER_SIZE ? need_size : MP4_MIN_BUFFER_SIZE;
 
     if (meta_avail < MP4_MIN_BUFFER_SIZE && !body_complete)
         return 0;
