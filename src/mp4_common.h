@@ -43,7 +43,7 @@ public:
 class Mp4TransformContext
 {
 public:
-    Mp4TransformContext(int64_t offset, int64_t cl):
+    Mp4TransformContext(float offset, int64_t cl):
                 total(0), tail(0), pos(0), content_length(0),
                 parse_over(false), raw_transform(false)
     {
@@ -90,14 +90,14 @@ public:
 class Mp4Context
 {
 public:
-    Mp4Context(int s): start(s), cl(0), mtc(NULL), transform_added(false)
+    Mp4Context(float s): start(s), cl(0), mtc(NULL), transform_added(false)
     {
     }
 
     ~Mp4Context() {}
 
 public:
-    int         start;
+    float       start;
     int64_t     cl;
 
     Mp4TransformContext *mtc;

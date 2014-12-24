@@ -44,7 +44,8 @@ TSRemapDoRemap(void* ih, TSHttpTxn rh, TSRemapRequestInfo *rri)
     int                 method_len, query_len;
     size_t              val_len;
     const char          *val;
-    int                 ret, start;
+    int                 ret;
+    float               start;
     char                buf[1024];
     int                 buf_len;
     int                 left, right;
@@ -62,13 +63,17 @@ TSRemapDoRemap(void* ih, TSHttpTxn rh, TSRemapRequestInfo *rri)
 
     val = ts_arg(query, query_len, "start", sizeof("start")-1, &val_len);
     if (val != NULL) {
-        ret = sscanf(val, "%d", &start);
+        ret = sscanf(val, "%f", &start);
         if (ret != 1)
             start = 0;
     }
 
     if (start == 0) {
         return TSREMAP_NO_REMAP;
+
+    } else if (start < 0) {
+        TSHttpTxnSetHttpRetStatus(rh, TS_HTTP_STATUS_BAD_REQUEST);
+        TSHttpTxnErrorBodySet(rh, TSstrdup("Invalid request."), sizeof("Invalid request.")-1, NULL);
     }
 
     // reset args

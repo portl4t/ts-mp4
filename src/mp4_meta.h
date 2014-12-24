@@ -484,7 +484,7 @@ public:
 
 public:
 
-    int64_t             start;                  // 请求输入的start
+    int64_t             start;                  // 请求输入的start, 毫秒计数
     int64_t             cl;                     // 文件本身大小
     int64_t             content_length;         // 重新生成之后的content length
     int64_t             meta_atom_size;
