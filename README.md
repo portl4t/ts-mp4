@@ -17,7 +17,7 @@ This allows performing a random seeking at any time. We can use flash player, vl
 We can write this in remap.config:
 
 ```c
-map http://v.foo.com/ http://inner.foo.com/ @plugin=/usr/lib64/trafficserver/plugins/libtsmp4.so
+map http://v.foo.com/ http://i.foo.com/ @plugin=/xx/libtsmp4.so
 ```
 
 ## System Requirements
