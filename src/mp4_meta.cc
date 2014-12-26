@@ -1130,17 +1130,15 @@ Mp4Meta::mp4_update_stts_atom(Mp4Trak *trak)
 found:
 
     old_sample = start_sample;
-    key_sample = this->mp4_find_key_frame(start_sample, trak);
+    key_sample = this->mp4_find_key_frame(start_sample, trak);      // find the last key frame before start_sample
+
     if (old_sample != key_sample) {
         start_sample = key_sample - 1;
         this->rs = (double)start_sample * 1000/(double)trak->timescale;
 
         if (trak->time_to_sample_entries == 1) {
-            this->rate = (double)start_sample/(double)total;
+            this->rate = (double)start_sample/(double)total;        // compute the time percent for video, prepare for audio.
         }
-
-    } else {
-
     }
 
     TSIOBufferReaderFree(readerp);
