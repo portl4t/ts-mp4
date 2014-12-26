@@ -2,9 +2,6 @@
 #ifndef _MP4_META_H
 #define _MP4_META_H
 
-#define __STDC_FORMAT_MACROS
-#define __STDC_LIMIT_MACROS
-
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -18,6 +15,8 @@
 #define MP4_MAX_TRAK_NUM            6
 #define MP4_MAX_BUFFER_SIZE         (10 * 1024 * 1024)
 #define MP4_MIN_BUFFER_SIZE         1024
+
+#define DEBUG_TAG                   "ts_mp4"
 
 #define mp4_set_atom_name(p, n1, n2, n3, n4)                              \
     ((u_char *) (p))[4] = n1;                                             \
@@ -402,7 +401,7 @@ public:
     Mp4Meta(): start(0), cl(0), content_length(0), meta_atom_size(0),
                   meta_avail(0), wait_next(0), need_size(0), rs(0), rate(0),
                   ftyp_size(0), moov_size(0), start_pos(0), timescale(0), trak_num(0),
-                  offset(0), meta_complete(false)
+                  passed(0), meta_complete(false)
     {
         meta_buffer = TSIOBufferCreate();
         meta_reader = TSIOBufferReaderAlloc(meta_buffer);
@@ -484,12 +483,12 @@ public:
 
 public:
 
-    int64_t             start;                  // 请求输入的start, 毫秒计数
-    int64_t             cl;                     // 文件本身大小
-    int64_t             content_length;         // 重新生成之后的content length
+    int64_t             start;                  // requested start time, measured in milliseconds.
+    int64_t             cl;                     // the total size of the mp4 file
+    int64_t             content_length;         // the size of the new mp4 file
     int64_t             meta_atom_size;
 
-    TSIOBuffer          meta_buffer;            // 传过来的数据
+    TSIOBuffer          meta_buffer;            // meta data to be parsed
     TSIOBufferReader    meta_reader;
 
     int64_t             meta_avail;
@@ -511,16 +510,16 @@ public:
 
     int64_t             ftyp_size;
     int64_t             moov_size;
-    int64_t             start_pos;              // 重新生成之后, 剩余的部分的开始位置
+    int64_t             start_pos;              // start position of the new mp4 file
     uint32_t            timescale;
 
     uint32_t            trak_num;
 
-    int64_t             offset;
+    int64_t             passed;
 
     u_char              mdat_atom_header[16];
 
-    bool                meta_complete;          // 标识meta已经解析完毕
+    bool                meta_complete;
 };
 
 #endif

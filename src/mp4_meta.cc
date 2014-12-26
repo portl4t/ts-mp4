@@ -64,22 +64,21 @@ Mp4Meta::parse_meta(bool body_complete)
     meta_avail = TSIOBufferReaderAvail(meta_reader);
 
     if (wait_next && wait_next <= meta_avail) {
-        meta_avail -= wait_next;
-        TSIOBufferReaderConsume(meta_reader, wait_next);
+        mp4_meta_consume(wait_next);
         wait_next = 0;
     }
 
     if (meta_avail < MP4_MIN_BUFFER_SIZE && !body_complete)
         return 0;
 
-    ret = this->parse_root_atoms();     // -1代表出错, 0代表还需要数据来继续解析, 1代表完毕
+    ret = this->parse_root_atoms();
 
     if (ret < 0) {
         return -1;
 
     } else if (ret == 0) {
 
-        if (body_complete) {            // 数据传完了, 但是仍然没有解析完, 算出错
+        if (body_complete) {
             return -1;
 
         } else {
@@ -87,6 +86,7 @@ Mp4Meta::parse_meta(bool body_complete)
         }
     }
 
+    // generate new meta data
     rc = this->post_process_meta();
     if (rc != 0) {
         return -1;
@@ -100,6 +100,7 @@ Mp4Meta::mp4_meta_consume(int64_t size)
 {
     TSIOBufferReaderConsume(meta_reader, size);
     meta_avail -= size;
+    passed += size;
 }
 
 
@@ -218,7 +219,11 @@ Mp4Meta::post_process_meta()
     return 0;
 }
 
-
+/*
+ * -1: error
+ *  0: unfinished
+ *  1: success.
+ */
 int
 Mp4Meta::parse_root_atoms()
 {
@@ -238,7 +243,7 @@ Mp4Meta::parse_root_atoms()
         atom_size = mp4_get_32value(buf);
 
         if (atom_size == 0) {
-            // TSDebug(DEBUG_TAG, "[%s] mp4 atom end", __FUNCTION__);      // can be here ?
+            // TSDebug(DEBUG_TAG, "[%s] mp4 atom end", __FUNCTION__);
             return 1;
         }
 
@@ -246,9 +251,8 @@ Mp4Meta::parse_root_atoms()
 
         if (atom_size < (int64_t)sizeof(mp4_atom_header)) {
 
-            if (atom_size == 1) {                                       // 需要从扩展头中取出长度信息
-
-                if (meta_avail < (int64_t)sizeof(mp4_atom_header64)) {   // 不够扩展atom头的长度
+            if (atom_size == 1) {
+                if (meta_avail < (int64_t)sizeof(mp4_atom_header64)) {
                     return 0;
                 }
 
@@ -261,9 +265,9 @@ Mp4Meta::parse_root_atoms()
             atom_size = mp4_get_64value(atom_header + 8);
             atom_header_size = sizeof(mp4_atom_header64);
 
-        } else {                                                     // 常规atom头
+        } else {                                                     // regular atom
 
-            if (meta_avail < (int64_t)sizeof(mp4_atom_header))       // 不够atom头的长度
+            if (meta_avail < (int64_t)sizeof(mp4_atom_header))       // not enough for atom header
                 return 0;
 
             atom_header_size = sizeof(mp4_atom_header);
@@ -271,7 +275,7 @@ Mp4Meta::parse_root_atoms()
 
         atom_name = atom_header + 4;
 
-        if (atom_size + this->offset > this->cl) {                  // 说明数据走过的位置 + 当前atom大小超过文件总长度, 认为有问题
+        if (atom_size + this->passed > this->cl) {
             // TSDebug(DEBUG_TAG, "[%s] mp4 atom is too large: %"PRId64,
             //        __FUNCTION__, atom_size);
             return -1;
@@ -280,12 +284,12 @@ Mp4Meta::parse_root_atoms()
         for (i = 0; mp4_atoms[i].name; i++) {
             if (memcmp(atom_name, mp4_atoms[i].name, 4) == 0) {
 
-                ret = (this->*mp4_atoms[i].handler)(atom_header_size, atom_size - atom_header_size);           // -1表示出错, 0 表示还需要数据继续, 1表示解析完毕
+                ret = (this->*mp4_atoms[i].handler)(atom_header_size, atom_size - atom_header_size);           // -1: error, 0: unfinished, 1: success
 
                 if (ret <= 0) {
                     return ret;
 
-                } else if (meta_complete) {             // 全部解析完毕
+                } else if (meta_complete) {             // success
                     return 1;
                 }
 
@@ -293,8 +297,8 @@ Mp4Meta::parse_root_atoms()
             }
         }
 
-        // 这里表示并不是关注的box
-        rc = mp4_atom_next(atom_size, true);            // 0 表示数据不够, 1表示正常通过
+        // nonsignificant atom box
+        rc = mp4_atom_next(atom_size, true);            // 0: unfinished, 1: success
         if (rc == 0) {
             return rc;
         }
@@ -310,8 +314,7 @@ int
 Mp4Meta::mp4_atom_next(int64_t atom_size, bool wait)
 {
     if (meta_avail >= atom_size) {
-        TSIOBufferReaderConsume(meta_reader, atom_size);
-        meta_avail -= atom_size;
+        mp4_meta_consume(atom_size);
         return 1;
     }
 
@@ -323,20 +326,25 @@ Mp4Meta::mp4_atom_next(int64_t atom_size, bool wait)
     return -1;
 }
 
+
+/*
+ *  -1: error
+ *   1: success
+ */
 int
-Mp4Meta::mp4_read_atom(mp4_atom_handler *atom, int64_t size)           // 返回-1表示错误, 正确返回1
+Mp4Meta::mp4_read_atom(mp4_atom_handler *atom, int64_t size)
 {
     int         i, ret, rc;
     int64_t     atom_size, atom_header_size;
     char        buf[32];
     char        *atom_header, *atom_name;
 
-    if (meta_avail < size)    // 数据不够, 对于第二级以下的atom是有问题的
+    if (meta_avail < size)    // data insufficient, not reasonable for internal atom box.
         return -1;
 
     while (size > 0) {
 
-        if (meta_avail < (int64_t)sizeof(uint32_t))            // 数据不够, 对于第二级以下的atom是有问题的
+        if (meta_avail < (int64_t)sizeof(uint32_t))            // data insufficient, not reasonable for internal atom box.
             return -1;
 
         TSIOBufferReaderCopy(meta_reader, buf, sizeof(mp4_atom_header64));
@@ -351,9 +359,8 @@ Mp4Meta::mp4_read_atom(mp4_atom_handler *atom, int64_t size)           // 返回
 
         if (atom_size < (int64_t)sizeof(mp4_atom_header)) {
 
-            if (atom_size == 1) {                               // 需要从扩展头中取出长度信息
-
-                if (meta_avail < (int64_t)sizeof(mp4_atom_header64)) {   // 不够扩展atom头的长度
+            if (atom_size == 1) {
+                if (meta_avail < (int64_t)sizeof(mp4_atom_header64)) {
                     return -1;
                 }
 
@@ -366,9 +373,9 @@ Mp4Meta::mp4_read_atom(mp4_atom_handler *atom, int64_t size)           // 返回
             atom_size = mp4_get_64value(atom_header + 8);
             atom_header_size = sizeof(mp4_atom_header64);
 
-        } else {                                        // 常规atom头
+        } else {                                        // regular atom
 
-            if (meta_avail < (int64_t)sizeof(mp4_atom_header))       // 不够atom头的长度
+            if (meta_avail < (int64_t)sizeof(mp4_atom_header))
                 return -1;
 
             atom_header_size = sizeof(mp4_atom_header);
@@ -376,7 +383,7 @@ Mp4Meta::mp4_read_atom(mp4_atom_handler *atom, int64_t size)           // 返回
 
         atom_name = atom_header + 4;
 
-        if (atom_size + this->offset > this->cl) {                      // 这里表示数据走过的位置 + 当前这个box的大小超过文件总长度意味着有问题
+        if (atom_size + this->passed > this->cl) {
             // TSDebug(DEBUG_TAG, "[%s] mp4 atom is too large: %"PRId64,
             //        __FUNCTION__, atom_size);
             return -1;
@@ -385,10 +392,10 @@ Mp4Meta::mp4_read_atom(mp4_atom_handler *atom, int64_t size)           // 返回
         for (i = 0; atom[i].name; i++) {
             if (memcmp(atom_name, atom[i].name, 4) == 0) {
 
-                if (meta_avail < atom_size)         // 数据不够
+                if (meta_avail < atom_size)
                     return -1;
 
-                ret = (this->*atom[i].handler)(atom_header_size, atom_size - atom_header_size);       // -1表示出错, 0 表示解析完毕
+                ret = (this->*atom[i].handler)(atom_header_size, atom_size - atom_header_size);       // -1: error, 0: success.
 
                 if (ret < 0) {
                     return ret;
@@ -398,8 +405,8 @@ Mp4Meta::mp4_read_atom(mp4_atom_handler *atom, int64_t size)           // 返回
             }
         }
 
-        // 这里说明不是关注的box
-        rc = mp4_atom_next(atom_size, false);                        // 0 表示数据不够, 1表示正常通过
+        // insignificant atom box
+        rc = mp4_atom_next(atom_size, false);
         if (rc < 0) {
             return rc;
         }
@@ -417,12 +424,12 @@ Mp4Meta::mp4_read_ftyp_atom(int64_t atom_header_size, int64_t atom_data_size)
 {
     int64_t         atom_size;
 
-    if (atom_data_size > MP4_MIN_BUFFER_SIZE)   // ftyp数据区太长
+    if (atom_data_size > MP4_MIN_BUFFER_SIZE)
         return -1;
 
     atom_size = atom_header_size + atom_data_size;
 
-    if (meta_avail < atom_size) {               // 数据不够, 由于是第一级别, 可以等待
+    if (meta_avail < atom_size) {               // data unsufficient, reasonable from the first level
         return 0;
     }
 
@@ -432,7 +439,7 @@ Mp4Meta::mp4_read_ftyp_atom(int64_t atom_header_size, int64_t atom_data_size)
     TSIOBufferCopy(ftyp_atom.buffer, meta_reader, atom_size, 0);
     mp4_meta_consume(atom_size);
 
-    content_length = atom_size;                 // 从这里开始计算真正要输出的长度大小
+    content_length = atom_size;
     ftyp_size = atom_size;
 
     return 1;
@@ -444,7 +451,7 @@ Mp4Meta::mp4_read_moov_atom(int64_t atom_header_size, int64_t atom_data_size)
     int64_t         atom_size;
     int             ret;
 
-    if (mdat_atom.buffer != NULL)       // 不满足流媒体格式
+    if (mdat_atom.buffer != NULL)       // not reasonable for streaming media
         return -1;
 
     atom_size = atom_header_size + atom_data_size;
@@ -452,7 +459,7 @@ Mp4Meta::mp4_read_moov_atom(int64_t atom_header_size, int64_t atom_data_size)
     if (atom_data_size >= MP4_MAX_BUFFER_SIZE)
         return -1;
 
-    if (meta_avail < atom_size) {       // 数据不够, 第一层级的需要等
+    if (meta_avail < atom_size) {       // data unsufficient, wait
         return 0;
     }
 
@@ -502,7 +509,7 @@ Mp4Meta::mp4_read_mvhd_atom(int64_t atom_header_size, int64_t atom_data_size)
     TSIOBufferCopy(mvhd_atom.buffer, meta_reader, atom_size, 0);
     mp4_meta_consume(atom_size);
 
-    // 重新设置duration
+    // reset duration
     if (mvhd->version[0] == 0) {
         mp4_reader_set_32value(mvhd_atom.reader,
                                offsetof(mp4_mvhd_atom, duration), duration);
@@ -521,7 +528,7 @@ Mp4Meta::mp4_read_trak_atom(int64_t atom_header_size, int64_t atom_data_size)
     int             rc;
     Mp4Trak         *trak;
 
-    if (trak_num >= MP4_MAX_TRAK_NUM - 1)       // trak数目太多了
+    if (trak_num >= MP4_MAX_TRAK_NUM - 1)
         return -1;
 
     trak = new Mp4Trak();
@@ -1081,7 +1088,7 @@ Mp4Meta::mp4_update_stts_atom(Mp4Trak *trak)
     start_sample = 0;
     readerp = TSIOBufferReaderClone(trak->stts_data.reader);
 
-    if (trak->time_to_sample_entries == 1) {            // 后续做进一步处理
+    if (trak->time_to_sample_entries == 1) {
         total = (uint32_t)mp4_reader_get_32value(readerp, offsetof(mp4_stts_entry, count));
 
         if (this->rate > 0) {
@@ -1105,11 +1112,8 @@ Mp4Meta::mp4_update_stts_atom(Mp4Trak *trak)
 
         } else if (start_time < (uint64_t)count * duration) {
             pass = (uint32_t)(start_time/duration);
-            start_sample += pass;           // 把还要过掉的sample数加上
-            count -= pass;                  // 这组sample还要保留的个数
-
-            // 因为还需要查找关键帧, 所以这里先不设置
-            // mp4_reader_set_32value(readerp, offsetof(mp4_stts_entry, count), count);
+            start_sample += pass;
+            count -= pass;
 
             goto found;
         }
@@ -1126,25 +1130,24 @@ Mp4Meta::mp4_update_stts_atom(Mp4Trak *trak)
 found:
 
     old_sample = start_sample;
-    key_sample = this->mp4_find_key_frame(start_sample, trak);              // 查找关键帧, 关键帧是从1开始计算
+    key_sample = this->mp4_find_key_frame(start_sample, trak);
     if (old_sample != key_sample) {
         start_sample = key_sample - 1;
-        this->rs = (double)start_sample * 1000/(double)trak->timescale;      // 重新计算开始时间
+        this->rs = (double)start_sample * 1000/(double)trak->timescale;
 
         if (trak->time_to_sample_entries == 1) {
-            this->rate = (double)start_sample/(double)total;                 // 计算一个百分比
+            this->rate = (double)start_sample/(double)total;
         }
 
-    } else {                    // 每一帧都是关键帧
+    } else {
 
     }
 
     TSIOBufferReaderFree(readerp);
-    readerp = TSIOBufferReaderClone(trak->stts_data.reader);        // 重新生成reader
+    readerp = TSIOBufferReaderClone(trak->stts_data.reader);
 
     trak->start_sample = start_sample;
 
-    /* 重新计算count和entry */
     for (i = 0; i < entries; i++) {
         count = (uint32_t)mp4_reader_get_32value(readerp, offsetof(mp4_stts_entry, count));
 
@@ -1157,7 +1160,7 @@ found:
         start_sample -= count;
     }
 
-    left = entries - i;         // 剩余的条目数
+    left = entries - i;
 
     atom_size = sizeof(mp4_stts_atom) + left * sizeof(mp4_stts_entry);
     trak->size += atom_size;
@@ -1186,7 +1189,7 @@ Mp4Meta::mp4_update_stss_atom(Mp4Trak *trak)
 
     readerp = TSIOBufferReaderClone(trak->stss_data.reader);
 
-    start_sample = trak->start_sample + 1;          // 这里得到的start_sample是关键帧号, 关键帧号是从1开始的
+    start_sample = trak->start_sample + 1;
     entries = trak->sync_samples_entries;
 
     for (i = 0; i < entries ; i++) {
@@ -1242,7 +1245,7 @@ Mp4Meta::mp4_update_ctts_atom(Mp4Trak *trak)
 
     readerp = TSIOBufferReaderClone(trak->ctts_data.reader);
 
-    start_sample = trak->start_sample + 1;          // 因为关键帧号码是从1开始的
+    start_sample = trak->start_sample + 1;
     entries = trak->composition_offset_entries;
 
     for (i = 0; i < entries; i++) {
@@ -1352,7 +1355,6 @@ found:
     if (samples == 0)
         return -1;
 
-    // 重新生成readerp
     readerp = TSIOBufferReaderClone(trak->stsc_data.reader);
     TSIOBufferReaderConsume(readerp, sizeof(mp4_stsc_entry) * (i-1));
 
@@ -1553,7 +1555,7 @@ Mp4Meta::mp4_update_trak_atom(Mp4Trak *trak)
 int
 Mp4Meta::mp4_adjust_co64_atom(Mp4Trak *trak, off_t adjustment)
 {
-    int64_t             pos, avail;
+    int64_t             pos, avail, offset;
     TSIOBufferReader    readerp;
 
     readerp = TSIOBufferReaderClone(trak->co64_data.reader);
@@ -1646,9 +1648,9 @@ Mp4Meta::mp4_find_key_frame(uint32_t start_sample, Mp4Trak *trak)
     readerp = TSIOBufferReaderClone(trak->stss_data.reader);
 
     for (i = 0; i < entries; i++) {
-        sample = (uint32_t)mp4_reader_get_32value(readerp, 0);  // 获得帧号码
+        sample = (uint32_t)mp4_reader_get_32value(readerp, 0);
 
-        if (sample > start_sample) {                            // 因为start_sample是从0开始, 所以不能包含等于条件
+        if (sample > start_sample) {
             goto found;
         }
 

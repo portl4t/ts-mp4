@@ -348,12 +348,15 @@ mp4_transform_handler(TSCont contp, Mp4Context *mc)
         }
 
     } else {
+
+        // copy the new meta data
         if (mtc->total < mtc->meta_length) {
             TSIOBufferCopy(mtc->output.buffer, mtc->mm.out_handle.reader, mtc->meta_length, 0);
             mtc->total += mtc->meta_length;
             write_down = true;
         }
 
+        // ignore useless part
         if (mtc->pos < mtc->tail) {
             avail = TSIOBufferReaderAvail(mtc->res_reader);
             need = mtc->tail - mtc->pos;
@@ -367,6 +370,7 @@ mp4_transform_handler(TSCont contp, Mp4Context *mc)
             }
         }
 
+        // copy the video & audio data
         if (mtc->pos >= mtc->tail) {
             avail = TSIOBufferReaderAvail(mtc->res_reader);
 
