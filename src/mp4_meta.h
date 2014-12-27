@@ -327,9 +327,10 @@ public:
     TSIOBufferReader    reader;
 };
 
-struct Mp4Trak
+class Mp4Trak
 {
-    Mp4Trak(): timescale(0), time_to_sample_entries(0), sample_to_chunk_entries(0),
+public:
+    Mp4Trak(): timescale(0), duration(0), time_to_sample_entries(0), sample_to_chunk_entries(0),
                sync_samples_entries(0), composition_offset_entries(0), sample_sizes_entries(0),
                chunks(0), start_sample(0), start_chunk(0), chunk_samples(0), chunk_samples_size(0),
                start_offset(0), tkhd_size(0), mdhd_size(0), hdlr_size(0), vmhd_size(0), smhd_size(0),
@@ -342,7 +343,10 @@ struct Mp4Trak
     {
     }
 
+public:
     uint32_t        timescale;
+    int64_t         duration;
+
     uint32_t        time_to_sample_entries;       // stsc
     uint32_t        sample_to_chunk_entries;      // stsc
     uint32_t        sync_samples_entries;         // stss

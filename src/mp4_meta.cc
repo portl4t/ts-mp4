@@ -619,7 +619,7 @@ Mp4Meta::mp4_read_mdia_atom(int64_t atom_header_size, int64_t atom_data_size)
 int
 Mp4Meta::mp4_read_mdhd_atom(int64_t atom_header_size, int64_t atom_data_size)
 {
-    int64_t             atom_size, duration;
+    int64_t             atom_size, duration, od;
     uint32_t            ts;
     Mp4Trak             *trak;
     mp4_mdhd_atom       *mdhd;
@@ -637,12 +637,15 @@ Mp4Meta::mp4_read_mdhd_atom(int64_t atom_header_size, int64_t atom_data_size)
         duration = mp4_get_64value(mdhd64.duration);
     }
 
+    od = duration;
+
     duration -= (uint64_t) this->start * ts / 1000;
     atom_size = atom_header_size + atom_data_size;
 
     trak = trak_vec[trak_num-1];
     trak->mdhd_size = atom_size;
     trak->timescale = ts;
+    trak->duration = od;
 
     trak->mdhd_atom.buffer = TSIOBufferCreate();
     trak->mdhd_atom.reader = TSIOBufferReaderAlloc(trak->mdhd_atom.buffer);
@@ -1134,9 +1137,8 @@ found:
 
     if (old_sample != key_sample) {
         start_sample = key_sample - 1;
-        this->rs = (double)start_sample * 1000/(double)trak->timescale;
-
         if (trak->time_to_sample_entries == 1) {
+            this->rs = ((double)start_sample/total) * ((double)trak->duration/trak->timescale);
             this->rate = (double)start_sample/(double)total;        // compute the time percent for video, prepare for audio.
         }
     }

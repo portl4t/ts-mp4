@@ -94,7 +94,13 @@ public:
     {
     }
 
-    ~Mp4Context() {}
+    ~Mp4Context()
+    {
+        if (mtc) {
+            delete mtc;
+            mtc = NULL;
+        }
+    }
 
 public:
     float       start;
