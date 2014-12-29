@@ -191,6 +191,9 @@ Mp4Meta::post_process_meta()
                                TSIOBufferReaderAvail(trak->out[j].reader), 0);
             }
         }
+
+        mp4_update_tkhd_duration(trak);
+        mp4_update_mdhd_duration(trak);
     }
 
     this->moov_size += 8;
@@ -215,6 +218,8 @@ Mp4Meta::post_process_meta()
             mp4_adjust_stco_atom(trak, adjustment);
         }
     }
+
+    mp4_update_mvhd_duration();
 
     return 0;
 }
@@ -479,7 +484,6 @@ Mp4Meta::mp4_read_mvhd_atom(int64_t atom_header_size, int64_t atom_data_size)
 {
     int64_t             atom_size;
     uint32_t            timescale;
-    uint64_t            duration;
     mp4_mvhd_atom       *mvhd;
     mp4_mvhd64_atom     mvhd64;
 
@@ -491,15 +495,12 @@ Mp4Meta::mp4_read_mvhd_atom(int64_t atom_header_size, int64_t atom_data_size)
 
     if (mvhd->version[0] == 0) {
         timescale = mp4_get_32value(mvhd->timescale);
-        duration = mp4_get_32value(mvhd->duration);
 
     } else {        // 64-bit duration
         timescale = mp4_get_32value(mvhd64.timescale);
-        duration = mp4_get_64value(mvhd64.duration);
     }
 
     this->timescale = timescale;
-    duration -= this->start * this->timescale / 1000;
 
     atom_size = atom_header_size + atom_data_size;
 
@@ -508,16 +509,6 @@ Mp4Meta::mp4_read_mvhd_atom(int64_t atom_header_size, int64_t atom_data_size)
 
     TSIOBufferCopy(mvhd_atom.buffer, meta_reader, atom_size, 0);
     mp4_meta_consume(atom_size);
-
-    // reset duration
-    if (mvhd->version[0] == 0) {
-        mp4_reader_set_32value(mvhd_atom.reader,
-                               offsetof(mp4_mvhd_atom, duration), duration);
-
-    } else {
-        mp4_reader_set_64value(mvhd_atom.reader,
-                               offsetof(mp4_mvhd64_atom, duration), duration);
-    }
 
     return 1;
 }
@@ -558,19 +549,9 @@ Mp4Meta::mp4_read_tkhd_atom(int64_t atom_header_size, int64_t atom_data_size)
     Mp4Trak             *trak;
     mp4_tkhd_atom       *tkhd_atom;
     mp4_tkhd64_atom     tkhd64_atom;
-    int64_t             duration;
 
     TSIOBufferReaderCopy(meta_reader, &tkhd64_atom, sizeof(mp4_tkhd64_atom));
     tkhd_atom = (mp4_tkhd_atom*)&tkhd64_atom;
-
-    if (tkhd_atom->version[0] == 0) {
-        duration = mp4_get_32value(tkhd_atom->duration);
-
-    } else {
-        duration = mp4_get_64value(tkhd64_atom.duration);
-    }
-
-    duration -= this->start * timescale / 1000;
 
     atom_size = atom_header_size + atom_data_size;
 
@@ -585,15 +566,6 @@ Mp4Meta::mp4_read_tkhd_atom(int64_t atom_header_size, int64_t atom_data_size)
 
     mp4_reader_set_32value(trak->tkhd_atom.reader,
                            offsetof(mp4_tkhd_atom, size), atom_size);
-
-    if (tkhd_atom->version[0] == 0) {
-        mp4_reader_set_32value(trak->tkhd_atom.reader,
-                               offsetof(mp4_tkhd_atom, duration), duration);
-
-    } else {
-        mp4_reader_set_64value(trak->tkhd_atom.reader,
-                               offsetof(mp4_tkhd64_atom, duration), duration);
-    }
 
     return 1;
 }
@@ -619,7 +591,7 @@ Mp4Meta::mp4_read_mdia_atom(int64_t atom_header_size, int64_t atom_data_size)
 int
 Mp4Meta::mp4_read_mdhd_atom(int64_t atom_header_size, int64_t atom_data_size)
 {
-    int64_t             atom_size, duration, od;
+    int64_t             atom_size, duration;
     uint32_t            ts;
     Mp4Trak             *trak;
     mp4_mdhd_atom       *mdhd;
@@ -637,15 +609,12 @@ Mp4Meta::mp4_read_mdhd_atom(int64_t atom_header_size, int64_t atom_data_size)
         duration = mp4_get_64value(mdhd64.duration);
     }
 
-    od = duration;
-
-    duration -= (uint64_t) this->start * ts / 1000;
     atom_size = atom_header_size + atom_data_size;
 
     trak = trak_vec[trak_num-1];
     trak->mdhd_size = atom_size;
     trak->timescale = ts;
-    trak->duration = od;
+    trak->duration = duration;
 
     trak->mdhd_atom.buffer = TSIOBufferCreate();
     trak->mdhd_atom.reader = TSIOBufferReaderAlloc(trak->mdhd_atom.buffer);
@@ -655,15 +624,6 @@ Mp4Meta::mp4_read_mdhd_atom(int64_t atom_header_size, int64_t atom_data_size)
 
     mp4_reader_set_32value(trak->mdhd_atom.reader,
                            offsetof(mp4_mdhd_atom, size), atom_size);
-
-    if (mdhd->version[0] == 0) {
-        mp4_reader_set_32value(trak->mdhd_atom.reader,
-                               offsetof(mp4_mdhd_atom, duration), duration);
-
-    } else {
-        mp4_reader_set_64value(trak->mdhd_atom.reader,
-                               offsetof(mp4_mdhd64_atom, duration), duration);
-    }
 
     return 1;
 }
@@ -1070,8 +1030,8 @@ Mp4Meta::mp4_read_mdat_atom(int64_t atom_header_size, int64_t atom_data_size)
 int
 Mp4Meta::mp4_update_stts_atom(Mp4Trak *trak)
 {
-    uint32_t            i, entries, count, duration, pass;
-    uint32_t            start_sample, left, start_count, total;
+    uint32_t            i, entries, count, duration, pass, sum;
+    uint32_t            start_sample, left, start_count;
     uint32_t            key_sample, old_sample;
     uint64_t            start_time;
     int64_t             atom_size;
@@ -1080,40 +1040,22 @@ Mp4Meta::mp4_update_stts_atom(Mp4Trak *trak)
     if (trak->stts_data.buffer == NULL)
         return -1;
 
-    total = start_count = 0;
+    sum = start_count = 0;
 
     entries = trak->time_to_sample_entries;
     start_time = this->start * trak->timescale / 1000;
     if (this->rs > 0) {
-        start_time = (uint64_t)(this->rs * trak->timescale);
+        start_time = (uint64_t)(this->rs * trak->timescale / 1000);
     }
 
     start_sample = 0;
     readerp = TSIOBufferReaderClone(trak->stts_data.reader);
 
-    if (trak->time_to_sample_entries == 1) {
-        total = (uint32_t)mp4_reader_get_32value(readerp, offsetof(mp4_stts_entry, count));
-
-        if (this->rate > 0) {
-            start_count = (uint32_t)(this->rate * total);
-        }
-    }
-
     for (i = 0; i < entries; i++) {
-        duration = (uint32_t)mp4_reader_get_32value(readerp,
-                                    offsetof(mp4_stts_entry, duration));
+        duration = (uint32_t)mp4_reader_get_32value(readerp, offsetof(mp4_stts_entry, duration));
+        count = (uint32_t)mp4_reader_get_32value(readerp, offsetof(mp4_stts_entry, count));
 
-        count = (uint32_t)mp4_reader_get_32value(readerp,
-                                     offsetof(mp4_stts_entry, count));
-
-        if (start_count > 0) {
-            if (start_count < count) {
-                start_sample = start_count;
-                count -= start_count;
-                goto found;
-            }
-
-        } else if (start_time < (uint64_t)count * duration) {
+        if (start_time < (uint64_t)count * duration) {
             pass = (uint32_t)(start_time/duration);
             start_sample += pass;
             count -= pass;
@@ -1133,14 +1075,10 @@ Mp4Meta::mp4_update_stts_atom(Mp4Trak *trak)
 found:
 
     old_sample = start_sample;
-    key_sample = this->mp4_find_key_frame(start_sample, trak);      // find the last key frame before start_sample
+    key_sample = this->mp4_find_key_sample(start_sample, trak);      // find the last key frame before start_sample
 
     if (old_sample != key_sample) {
         start_sample = key_sample - 1;
-        if (trak->time_to_sample_entries == 1) {
-            this->rs = ((double)start_sample/total) * ((double)trak->duration/trak->timescale);
-            this->rate = (double)start_sample/(double)total;        // compute the time percent for video, prepare for audio.
-        }
     }
 
     TSIOBufferReaderFree(readerp);
@@ -1149,15 +1087,25 @@ found:
     trak->start_sample = start_sample;
 
     for (i = 0; i < entries; i++) {
+        duration = (uint32_t)mp4_reader_get_32value(readerp, offsetof(mp4_stts_entry, duration));
         count = (uint32_t)mp4_reader_get_32value(readerp, offsetof(mp4_stts_entry, count));
 
         if (start_sample < count) {
             count -= start_sample;
             mp4_reader_set_32value(readerp, offsetof(mp4_stts_entry, count), count);
+
+            sum += start_sample * duration;
             break;
         }
 
         start_sample -= count;
+        sum += count * duration;
+
+        TSIOBufferReaderConsume(readerp, sizeof(mp4_stts_entry));
+    }
+
+    if (this->rs == 0) {
+        this->rs = ((double)sum/trak->duration) * ((double)trak->duration/trak->timescale) * 1000;
     }
 
     left = entries - i;
@@ -1165,11 +1113,8 @@ found:
     atom_size = sizeof(mp4_stts_atom) + left * sizeof(mp4_stts_entry);
     trak->size += atom_size;
 
-    mp4_reader_set_32value(trak->stts_atom.reader, offsetof(mp4_stts_atom, size),
-                           atom_size);
-
-    mp4_reader_set_32value(trak->stts_atom.reader, offsetof(mp4_stts_atom, entries),
-                           left);
+    mp4_reader_set_32value(trak->stts_atom.reader, offsetof(mp4_stts_atom, size), atom_size);
+    mp4_reader_set_32value(trak->stts_atom.reader, offsetof(mp4_stts_atom, entries), left);
 
     TSIOBufferReaderConsume(trak->stts_data.reader, i * sizeof(mp4_stts_entry));
     TSIOBufferReaderFree(readerp);
@@ -1633,7 +1578,7 @@ Mp4Meta::mp4_update_mdat_atom(int64_t start_offset)
 
 
 uint32_t
-Mp4Meta::mp4_find_key_frame(uint32_t start_sample, Mp4Trak *trak)
+Mp4Meta::mp4_find_key_sample(uint32_t start_sample, Mp4Trak *trak)
 {
     uint32_t            i;
     uint32_t            sample, prev_sample, entries;
@@ -1665,6 +1610,109 @@ found:
 
     TSIOBufferReaderFree(readerp);
     return prev_sample;
+}
+
+void
+Mp4Meta::mp4_update_mvhd_duration()
+{
+    int64_t             need;
+    uint64_t            duration, cut;
+    mp4_mvhd_atom       *mvhd;
+    mp4_mvhd64_atom     mvhd64;
+
+    need = TSIOBufferReaderAvail(mvhd_atom.reader);
+
+    if (need > (int64_t)sizeof(mp4_mvhd64_atom))
+        need = sizeof(mp4_mvhd64_atom);
+
+    TSIOBufferReaderCopy(mvhd_atom.reader, &mvhd64, need);
+    mvhd = (mp4_mvhd_atom*)&mvhd64;
+
+    if (this->rs > 0) {
+        cut = (uint64_t)(this->rs * this->timescale / 1000);
+
+    } else {
+        cut = this->start * this->timescale / 1000;
+    }
+
+    if (mvhd->version[0] == 0) {
+        duration = mp4_get_32value(mvhd->duration);
+        duration -= cut;
+        mp4_reader_set_32value(mvhd_atom.reader, offsetof(mp4_mvhd_atom, duration), duration);
+
+    } else {        // 64-bit duration
+        duration = mp4_get_64value(mvhd64.duration);
+        duration -= cut;
+        mp4_reader_set_64value(mvhd_atom.reader, offsetof(mp4_mvhd64_atom, duration), duration);
+    }
+}
+
+void
+Mp4Meta::mp4_update_tkhd_duration(Mp4Trak *trak)
+{
+    int64_t             need, cut;
+    mp4_tkhd_atom       *tkhd_atom;
+    mp4_tkhd64_atom     tkhd64_atom;
+    int64_t             duration;
+
+    need = TSIOBufferReaderAvail(trak->tkhd_atom.reader);
+
+    if (need > (int64_t)sizeof(mp4_tkhd64_atom))
+        need = sizeof(mp4_tkhd64_atom);
+
+    TSIOBufferReaderCopy(trak->tkhd_atom.reader, &tkhd64_atom, need);
+    tkhd_atom = (mp4_tkhd_atom*)&tkhd64_atom;
+
+    if (this->rs > 0) {
+        cut = (uint64_t)(this->rs * this->timescale / 1000);
+
+    } else {
+        cut = this->start * this->timescale / 1000;
+    }
+
+    if (tkhd_atom->version[0] == 0) {
+        duration = mp4_get_32value(tkhd_atom->duration);
+        duration -= cut;
+        mp4_reader_set_32value(trak->tkhd_atom.reader, offsetof(mp4_tkhd_atom, duration), duration);
+
+    } else {
+        duration = mp4_get_64value(tkhd64_atom.duration);
+        duration -= cut;
+        mp4_reader_set_64value(trak->tkhd_atom.reader, offsetof(mp4_tkhd64_atom, duration), duration);
+    }
+}
+
+void
+Mp4Meta::mp4_update_mdhd_duration(Mp4Trak *trak)
+{
+    int64_t             duration, need, cut;
+    mp4_mdhd_atom       *mdhd;
+    mp4_mdhd64_atom     mdhd64;
+
+     need = TSIOBufferReaderAvail(trak->mdhd_atom.reader);
+     if (need > (int64_t)sizeof(mp4_mdhd64_atom))
+         need = sizeof(mp4_mdhd64_atom);
+
+    TSIOBufferReaderCopy(trak->mdhd_atom.reader, &mdhd64, need);
+    mdhd = (mp4_mdhd_atom*)&mdhd64;
+
+    if (this->rs > 0) {
+        cut = (uint64_t)(this->rs * trak->timescale / 1000);
+
+    } else {
+        cut = this->start * trak->timescale / 1000;
+    }
+
+    if (mdhd->version[0] == 0) {
+        duration = mp4_get_32value(mdhd->duration);
+        duration -= cut;
+        mp4_reader_set_32value(trak->mdhd_atom.reader, offsetof(mp4_mdhd_atom, duration), duration);
+
+    } else {
+        duration = mp4_get_64value(mdhd64.duration);
+        duration -= cut;
+        mp4_reader_set_64value(trak->mdhd_atom.reader, offsetof(mp4_mdhd64_atom, duration), duration);
+    }
 }
 
 

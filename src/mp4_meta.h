@@ -332,9 +332,9 @@ class Mp4Trak
 public:
     Mp4Trak(): timescale(0), duration(0), time_to_sample_entries(0), sample_to_chunk_entries(0),
                sync_samples_entries(0), composition_offset_entries(0), sample_sizes_entries(0),
-               chunks(0), start_sample(0), start_chunk(0), chunk_samples(0), chunk_samples_size(0),
-               start_offset(0), tkhd_size(0), mdhd_size(0), hdlr_size(0), vmhd_size(0), smhd_size(0),
-               dinf_size(0), size(0)
+               chunks(0), start_sample(0), start_chunk(0), chunk_samples(0),
+               chunk_samples_size(0), start_offset(0), tkhd_size(0), mdhd_size(0), hdlr_size(0),
+               vmhd_size(0), smhd_size(0), dinf_size(0), size(0)
     {
         memset(&stsc_chunk_entry, 0, sizeof(mp4_stsc_entry));
     }
@@ -483,7 +483,10 @@ public:
     int mp4_adjust_co64_atom(Mp4Trak *trak, off_t adjustment);
     int mp4_adjust_stco_atom(Mp4Trak *trak, int32_t adjustment);
 
-    uint32_t mp4_find_key_frame(uint32_t start_sample, Mp4Trak *trak);
+    uint32_t mp4_find_key_sample(uint32_t start_sample, Mp4Trak *trak);
+    void mp4_update_mvhd_duration();
+    void mp4_update_tkhd_duration(Mp4Trak *trak);
+    void mp4_update_mdhd_duration(Mp4Trak *trak);
 
 public:
 
