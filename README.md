@@ -36,3 +36,9 @@ map http://v.foo.com/ http://i.foo.com/ @plugin=/xx/libtsmp4.so
 
 **step3**: modify remap.config and restart the trafficserver
 
+## History
+* 2014-12-29, fix integer overflow, support more than one stts entries.
+* 2014-12-27, fix memory leak.
+* 2014-12-24, fix bugs that cache can be corrupted.
+* 2014-12-21, first commit.
+
