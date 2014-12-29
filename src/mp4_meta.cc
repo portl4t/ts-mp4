@@ -1030,10 +1030,10 @@ Mp4Meta::mp4_read_mdat_atom(int64_t atom_header_size, int64_t atom_data_size)
 int
 Mp4Meta::mp4_update_stts_atom(Mp4Trak *trak)
 {
-    uint32_t            i, entries, count, duration, pass, sum;
+    uint32_t            i, entries, count, duration, pass;
     uint32_t            start_sample, left, start_count;
     uint32_t            key_sample, old_sample;
-    uint64_t            start_time;
+    uint64_t            start_time, sum;
     int64_t             atom_size;
     TSIOBufferReader    readerp;
 
@@ -1064,7 +1064,7 @@ Mp4Meta::mp4_update_stts_atom(Mp4Trak *trak)
         }
 
         start_sample += count;
-        start_time -= count * duration;
+        start_time -= (uint64_t)count * duration;
         TSIOBufferReaderConsume(readerp, sizeof(mp4_stts_entry));
     }
 
@@ -1094,12 +1094,12 @@ found:
             count -= start_sample;
             mp4_reader_set_32value(readerp, offsetof(mp4_stts_entry, count), count);
 
-            sum += start_sample * duration;
+            sum += (uint64_t)start_sample * duration;
             break;
         }
 
         start_sample -= count;
-        sum += count * duration;
+        sum += (uint64_t)count * duration;
 
         TSIOBufferReaderConsume(readerp, sizeof(mp4_stts_entry));
     }
