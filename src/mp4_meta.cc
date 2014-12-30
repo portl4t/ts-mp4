@@ -50,10 +50,11 @@ static mp4_atom_handler mp4_stbl_atoms[] = {
 };
 
 
-void mp4_reader_set_32value(TSIOBufferReader readerp, int64_t offset, uint32_t n);
-void mp4_reader_set_64value(TSIOBufferReader readerp, int64_t offset, uint64_t n);
-uint32_t mp4_reader_get_32value(TSIOBufferReader readerp, int64_t offset);
-uint64_t mp4_reader_get_64value(TSIOBufferReader readerp, int64_t offset);
+static void mp4_reader_set_32value(TSIOBufferReader readerp, int64_t offset, uint32_t n);
+static void mp4_reader_set_64value(TSIOBufferReader readerp, int64_t offset, uint64_t n);
+static uint32_t mp4_reader_get_32value(TSIOBufferReader readerp, int64_t offset);
+static uint64_t mp4_reader_get_64value(TSIOBufferReader readerp, int64_t offset);
+static int64_t IOBufferReaderCopy(TSIOBufferReader readerp, void *buf, int64_t length);
 
 
 int
@@ -244,7 +245,7 @@ Mp4Meta::parse_root_atoms()
         if (meta_avail < (int64_t)sizeof(uint32_t))
             return 0;
 
-        TSIOBufferReaderCopy(meta_reader, buf, sizeof(mp4_atom_header64));
+        IOBufferReaderCopy(meta_reader, buf, sizeof(mp4_atom_header64));
         atom_size = mp4_get_32value(buf);
 
         if (atom_size == 0) {
@@ -352,7 +353,7 @@ Mp4Meta::mp4_read_atom(mp4_atom_handler *atom, int64_t size)
         if (meta_avail < (int64_t)sizeof(uint32_t))            // data insufficient, not reasonable for internal atom box.
             return -1;
 
-        TSIOBufferReaderCopy(meta_reader, buf, sizeof(mp4_atom_header64));
+        IOBufferReaderCopy(meta_reader, buf, sizeof(mp4_atom_header64));
         atom_size = mp4_get_32value(buf);
 
         if (atom_size == 0) {
@@ -490,7 +491,7 @@ Mp4Meta::mp4_read_mvhd_atom(int64_t atom_header_size, int64_t atom_data_size)
     if (sizeof(mp4_mvhd_atom) - 8 > (size_t)atom_data_size)
         return -1;
 
-    TSIOBufferReaderCopy(meta_reader, &mvhd64, sizeof(mp4_mvhd64_atom));
+    IOBufferReaderCopy(meta_reader, &mvhd64, sizeof(mp4_mvhd64_atom));
     mvhd = (mp4_mvhd_atom*)&mvhd64;
 
     if (mvhd->version[0] == 0) {
@@ -550,7 +551,7 @@ Mp4Meta::mp4_read_tkhd_atom(int64_t atom_header_size, int64_t atom_data_size)
     mp4_tkhd_atom       *tkhd_atom;
     mp4_tkhd64_atom     tkhd64_atom;
 
-    TSIOBufferReaderCopy(meta_reader, &tkhd64_atom, sizeof(mp4_tkhd64_atom));
+    IOBufferReaderCopy(meta_reader, &tkhd64_atom, sizeof(mp4_tkhd64_atom));
     tkhd_atom = (mp4_tkhd_atom*)&tkhd64_atom;
 
     atom_size = atom_header_size + atom_data_size;
@@ -597,7 +598,7 @@ Mp4Meta::mp4_read_mdhd_atom(int64_t atom_header_size, int64_t atom_data_size)
     mp4_mdhd_atom       *mdhd;
     mp4_mdhd64_atom     mdhd64;
 
-    TSIOBufferReaderCopy(meta_reader, &mdhd64, sizeof(mp4_mdhd64_atom));
+    IOBufferReaderCopy(meta_reader, &mdhd64, sizeof(mp4_mdhd64_atom));
     mdhd = (mp4_mdhd_atom*)&mdhd64;
 
     if (mdhd->version[0] == 0) {
@@ -775,7 +776,7 @@ Mp4Meta::mp4_read_stts_atom(int64_t atom_header_size, int64_t atom_data_size)
     if (sizeof(mp4_stts_atom) - 8 > (size_t)atom_data_size)
         return -1;
 
-    TSIOBufferReaderCopy(meta_reader, &stts, sizeof(mp4_stts_atom));
+    IOBufferReaderCopy(meta_reader, &stts, sizeof(mp4_stts_atom));
 
     entries = mp4_get_32value(stts.entries);
     esize = entries * sizeof(mp4_stts_entry);
@@ -810,7 +811,7 @@ Mp4Meta::mp4_read_stss_atom(int64_t atom_header_size, int64_t atom_data_size)
     if (sizeof(mp4_stss_atom) - 8 > (size_t)atom_data_size)
         return -1;
 
-    TSIOBufferReaderCopy(meta_reader, &stss, sizeof(mp4_stss_atom));
+    IOBufferReaderCopy(meta_reader, &stss, sizeof(mp4_stss_atom));
     entries = mp4_get_32value(stss.entries);
     esize = entries * sizeof(int32_t);
 
@@ -844,7 +845,7 @@ Mp4Meta::mp4_read_ctts_atom(int64_t atom_header_size, int64_t atom_data_size)
     if (sizeof(mp4_ctts_atom) - 8 > (size_t)atom_data_size)
         return -1;
 
-    TSIOBufferReaderCopy(meta_reader, &ctts, sizeof(mp4_ctts_atom));
+    IOBufferReaderCopy(meta_reader, &ctts, sizeof(mp4_ctts_atom));
     entries = mp4_get_32value(ctts.entries);
     esize = entries * sizeof(mp4_ctts_entry);
 
@@ -878,7 +879,7 @@ Mp4Meta::mp4_read_stsc_atom(int64_t atom_header_size, int64_t atom_data_size)
     if (sizeof(mp4_stsc_atom) - 8 > (size_t)atom_data_size)
         return -1;
 
-    TSIOBufferReaderCopy(meta_reader, &stsc, sizeof(mp4_stsc_atom));
+    IOBufferReaderCopy(meta_reader, &stsc, sizeof(mp4_stsc_atom));
     entries = mp4_get_32value(stsc.entries);
     esize = entries * sizeof(mp4_stsc_entry);
 
@@ -912,7 +913,7 @@ Mp4Meta::mp4_read_stsz_atom(int64_t atom_header_size, int64_t atom_data_size)
     if (sizeof(mp4_stsz_atom) - 8 > (size_t)atom_data_size)
         return -1;
 
-    TSIOBufferReaderCopy(meta_reader, &stsz, sizeof(mp4_stsz_atom));
+    IOBufferReaderCopy(meta_reader, &stsz, sizeof(mp4_stsz_atom));
     entries = mp4_get_32value(stsz.entries);
     esize = entries * sizeof(int32_t);
 
@@ -956,7 +957,7 @@ Mp4Meta::mp4_read_stco_atom(int64_t atom_header_size, int64_t atom_data_size)
     if (sizeof(mp4_stco_atom) - 8 > (size_t)atom_data_size)
         return -1;
 
-    TSIOBufferReaderCopy(meta_reader, &stco, sizeof(mp4_stco_atom));
+    IOBufferReaderCopy(meta_reader, &stco, sizeof(mp4_stco_atom));
     entries = mp4_get_32value(stco.entries);
     esize = entries * sizeof(int32_t);
 
@@ -990,7 +991,7 @@ Mp4Meta::mp4_read_co64_atom(int64_t atom_header_size, int64_t atom_data_size)
     if (sizeof(mp4_co64_atom) - 8 > (size_t)atom_data_size)
         return -1;
 
-    TSIOBufferReaderCopy(meta_reader, &co64, sizeof(mp4_co64_atom));
+    IOBufferReaderCopy(meta_reader, &co64, sizeof(mp4_co64_atom));
     entries = mp4_get_32value(co64.entries);
     esize = entries * sizeof(int64_t);
 
@@ -1625,7 +1626,7 @@ Mp4Meta::mp4_update_mvhd_duration()
     if (need > (int64_t)sizeof(mp4_mvhd64_atom))
         need = sizeof(mp4_mvhd64_atom);
 
-    TSIOBufferReaderCopy(mvhd_atom.reader, &mvhd64, need);
+    IOBufferReaderCopy(mvhd_atom.reader, &mvhd64, need);
     mvhd = (mp4_mvhd_atom*)&mvhd64;
 
     if (this->rs > 0) {
@@ -1660,7 +1661,7 @@ Mp4Meta::mp4_update_tkhd_duration(Mp4Trak *trak)
     if (need > (int64_t)sizeof(mp4_tkhd64_atom))
         need = sizeof(mp4_tkhd64_atom);
 
-    TSIOBufferReaderCopy(trak->tkhd_atom.reader, &tkhd64_atom, need);
+    IOBufferReaderCopy(trak->tkhd_atom.reader, &tkhd64_atom, need);
     tkhd_atom = (mp4_tkhd_atom*)&tkhd64_atom;
 
     if (this->rs > 0) {
@@ -1693,7 +1694,7 @@ Mp4Meta::mp4_update_mdhd_duration(Mp4Trak *trak)
      if (need > (int64_t)sizeof(mp4_mdhd64_atom))
          need = sizeof(mp4_mdhd64_atom);
 
-    TSIOBufferReaderCopy(trak->mdhd_atom.reader, &mdhd64, need);
+    IOBufferReaderCopy(trak->mdhd_atom.reader, &mdhd64, need);
     mdhd = (mp4_mdhd_atom*)&mdhd64;
 
     if (this->rs > 0) {
@@ -1716,7 +1717,7 @@ Mp4Meta::mp4_update_mdhd_duration(Mp4Trak *trak)
 }
 
 
-void
+static void
 mp4_reader_set_32value(TSIOBufferReader readerp, int64_t offset, uint32_t n)
 {
     int                 pos;
@@ -1756,7 +1757,7 @@ mp4_reader_set_32value(TSIOBufferReader readerp, int64_t offset, uint32_t n)
     }
 }
 
-void
+static void
 mp4_reader_set_64value(TSIOBufferReader readerp, int64_t offset, uint64_t n)
 {
     int                 pos;
@@ -1796,7 +1797,7 @@ mp4_reader_set_64value(TSIOBufferReader readerp, int64_t offset, uint64_t n)
     }
 }
 
-uint32_t
+static uint32_t
 mp4_reader_get_32value(TSIOBufferReader readerp, int64_t offset)
 {
     int                 pos;
@@ -1840,7 +1841,7 @@ mp4_reader_get_32value(TSIOBufferReader readerp, int64_t offset)
     return -1;
 }
 
-uint64_t
+static uint64_t
 mp4_reader_get_64value(TSIOBufferReader readerp, int64_t offset)
 {
     int                 pos;
@@ -1882,5 +1883,34 @@ mp4_reader_get_64value(TSIOBufferReader readerp, int64_t offset)
     }
 
     return -1;
+}
+
+static int64_t
+IOBufferReaderCopy(TSIOBufferReader readerp, void *buf, int64_t length)
+{
+    int64_t             avail, need, n;
+    const char          *start;
+    TSIOBufferBlock     blk;
+
+    n = 0;
+    blk = TSIOBufferReaderStart(readerp);
+
+    while (blk) {
+        start = TSIOBufferBlockReadStart(blk, readerp, &avail);
+        need = length < avail ? length : avail;
+
+        if (need > 0) {
+            memcpy((char*)buf + n, start, need);
+            length -= need;
+            n += need;
+        }
+
+        if (length == 0)
+            break;
+
+        blk = TSIOBufferBlockNext(blk);
+    }
+
+    return n;
 }
 
