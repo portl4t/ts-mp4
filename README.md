@@ -21,7 +21,7 @@ map http://v.foo.com/ http://i.foo.com/ @plugin=/xx/libtsmp4.so
 ```
 
 ## System Requirements
-* linux 64bits
+* linux/freebsd 64bits
 * trafficserver
 
 ## Build
@@ -30,7 +30,7 @@ map http://v.foo.com/ http://i.foo.com/ @plugin=/xx/libtsmp4.so
     git clone https://github.com/portl4t/ts-mp4.git
     cd ts-mp4/src
 
-**step2**: build, requires linux(64bits is recommended)
+**step2**: build, requires linux/freebsd (64bits is recommended)
 
     make
 
@@ -40,6 +40,7 @@ map http://v.foo.com/ http://i.foo.com/ @plugin=/xx/libtsmp4.so
 It is not a good idea to cache a large mp4 file, as we have to generate new meta data if `start` exists, and it will take a long time to accomplish. As far as I know, many video sites will cut the large video file into many pieces, and each piece will be less than 70M(bytes), it will be a reasonable choice.
 
 ## History
+* 2014-12-30, change TSIOBufferReaderCopy to IOBufferReaderCopy, support freebsd
 * 2014-12-29, fix integer overflow, support more than one stts entries.
 * 2014-12-27, fix memory leak.
 * 2014-12-24, fix bugs that cache can be corrupted.
