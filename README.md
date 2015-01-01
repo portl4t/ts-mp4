@@ -40,6 +40,7 @@ map http://v.foo.com/ http://i.foo.com/ @plugin=/xx/libtsmp4.so
 It is not a good idea to cache a large mp4 file, as we have to generate new meta data if `start` exists, and it will take a long time to accomplish. As far as I know, many video sites will cut the large video file into many pieces, and each piece will be less than 70M(bytes), it will be a reasonable choice.
 
 ## History
+* 2015-01-01, output from the last key sample if start time can not be reached
 * 2014-12-30, change TSIOBufferReaderCopy to IOBufferReaderCopy, support freebsd
 * 2014-12-29, fix integer overflow, support more than one stts entries.
 * 2014-12-27, fix memory leak.
