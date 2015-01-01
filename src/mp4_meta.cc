@@ -1069,11 +1069,9 @@ Mp4Meta::mp4_update_stts_atom(Mp4Trak *trak)
         TSIOBufferReaderConsume(readerp, sizeof(mp4_stts_entry));
     }
 
-    TSIOBufferReaderFree(readerp);
-
-    return -1;
-
 found:
+
+    TSIOBufferReaderFree(readerp);
 
     old_sample = start_sample;
     key_sample = this->mp4_find_key_sample(start_sample, trak);      // find the last key frame before start_sample
@@ -1082,7 +1080,6 @@ found:
         start_sample = key_sample - 1;
     }
 
-    TSIOBufferReaderFree(readerp);
     readerp = TSIOBufferReaderClone(trak->stts_data.reader);
 
     trak->start_sample = start_sample;
@@ -1603,9 +1600,6 @@ Mp4Meta::mp4_find_key_sample(uint32_t start_sample, Mp4Trak *trak)
         prev_sample = sample;
         TSIOBufferReaderConsume(readerp, sizeof(uint32_t));
     }
-
-    TSIOBufferReaderFree(readerp);
-    return start_sample;
 
 found:
 
