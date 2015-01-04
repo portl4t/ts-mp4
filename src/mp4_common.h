@@ -51,8 +51,8 @@ public:
         res_reader = TSIOBufferReaderAlloc(res_buffer);
         dup_reader = TSIOBufferReaderAlloc(res_buffer);
 
-        mm.start = offset * 1000;      // 将跳转时间赋值给Mp4Context, 用于解析
-        mm.cl = cl;                    // 将文件长度也设置好
+        mm.start = offset * 1000;
+        mm.cl = cl;
     }
 
     ~Mp4TransformContext()
@@ -73,18 +73,18 @@ public:
 public:
     IOHandle            output;
     Mp4Meta             mm;
-    int64_t             total;          // 向下游输出总量
-    int64_t             tail;           // MP4剩余部分从哪里开始
-    int64_t             pos;            // 数据已经走到的位置
-    int64_t             content_length; // 重新生成的mp4的长度值
-    int64_t             meta_length;    // 重新生成的mp4的meta长度
+    int64_t             total;
+    int64_t             tail;
+    int64_t             pos;
+    int64_t             content_length;
+    int64_t             meta_length;
 
     TSIOBuffer          res_buffer;
     TSIOBufferReader    res_reader;
-    TSIOBufferReader    dup_reader;     // 用于解析meta
+    TSIOBufferReader    dup_reader;
 
-    bool                parse_over;     // MP4的meta是否已经解析完毕
-    bool                raw_transform;  // 是否原样输出(因为解析有问题)
+    bool                parse_over;
+    bool                raw_transform;
 };
 
 class Mp4Context
