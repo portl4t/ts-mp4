@@ -249,7 +249,6 @@ Mp4Meta::parse_root_atoms()
         atom_size = mp4_get_32value(buf);
 
         if (atom_size == 0) {
-            // TSDebug(DEBUG_TAG, "[%s] mp4 atom end", __FUNCTION__);
             return 1;
         }
 
@@ -263,8 +262,6 @@ Mp4Meta::parse_root_atoms()
                 }
 
             } else {
-                // TSDebug(DEBUG_TAG, "[%s] mp4 atom is too small: %"PRId64,
-                //        __FUNCTION__, atom_size);
                 return -1;
             }
 
@@ -282,8 +279,6 @@ Mp4Meta::parse_root_atoms()
         atom_name = atom_header + 4;
 
         if (atom_size + this->passed > this->cl) {
-            // TSDebug(DEBUG_TAG, "[%s] mp4 atom is too large: %"PRId64,
-            //        __FUNCTION__, atom_size);
             return -1;
         }
 
@@ -357,7 +352,6 @@ Mp4Meta::mp4_read_atom(mp4_atom_handler *atom, int64_t size)
         atom_size = mp4_get_32value(buf);
 
         if (atom_size == 0) {
-            // TSDebug(DEBUG_TAG, "[%s] mp4 atom end", __FUNCTION__);
             return 1;
         }
 
@@ -371,8 +365,6 @@ Mp4Meta::mp4_read_atom(mp4_atom_handler *atom, int64_t size)
                 }
 
             } else {
-                // TSDebug(DEBUG_TAG, "[%s] mp4 atom is too small: %"PRId64,
-                //        __FUNCTION__, atom_size);
                 return -1;
             }
 
@@ -390,8 +382,6 @@ Mp4Meta::mp4_read_atom(mp4_atom_handler *atom, int64_t size)
         atom_name = atom_header + 4;
 
         if (atom_size + this->passed > this->cl) {
-            // TSDebug(DEBUG_TAG, "[%s] mp4 atom is too large: %"PRId64,
-            //        __FUNCTION__, atom_size);
             return -1;
         }
 
