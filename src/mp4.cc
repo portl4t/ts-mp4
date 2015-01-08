@@ -1,3 +1,20 @@
+/*
+  Licensed to the Apache Software Foundation (ASF) under one
+  or more contributor license agreements.  See the NOTICE file
+  distributed with this work for additional information
+  regarding copyright ownership.  The ASF licenses this file
+  to you under the Apache License, Version 2.0 (the
+  "License"); you may not use this file except in compliance
+  with the License.  You may obtain a copy of the License at
+
+  http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+*/
 
 #include "mp4_common.h"
 
@@ -15,33 +32,41 @@ static int mp4_parse_meta(Mp4TransformContext *mtc, bool body_complete);
 TSReturnCode
 TSRemapInit(TSRemapInterface *api_info, char *errbuf, int errbuf_size)
 {
-    if (!api_info)
+    if (!api_info) {
+        snprintf(errbuf, errbuf_size, "[TSRemapInit] - Invalid TSRemapInterface argument");
         return TS_ERROR;
+    }
 
-    if (api_info->size < sizeof(TSRemapInterface))
+    if (api_info->size < sizeof(TSRemapInterface)) {
+        snprintf(errbuf, errbuf_size, "[TSRemapInit] - Incorrect size of TSRemapInterface structure");
         return TS_ERROR;
+    }
 
     return TS_SUCCESS;
 }
 
 TSReturnCode
-TSRemapNewInstance(int argc, char* argv[], void** ih, char* errbuf, int errbuf_size)
+TSRemapNewInstance(int argc, char** /* argv ATS_UNUSED */, void** ih, char* errbuf, int errbuf_size)
 {
+    if (argc > 2) {
+        snprintf(errbuf, errbuf_size, "[TSRemapNewInstance] - Argument should be removed");
+    }
+
     *ih = NULL;
     return TS_SUCCESS;
 }
 
 void
-TSRemapDeleteInstance(void* ih)
+TSRemapDeleteInstance(void* /* ih ATS_UNUSED */)
 {
     return;
 }
 
 TSRemapStatus
-TSRemapDoRemap(void* ih, TSHttpTxn rh, TSRemapRequestInfo *rri)
+TSRemapDoRemap(void* /* ih ATS_UNUSED */, TSHttpTxn rh, TSRemapRequestInfo *rri)
 {
-    const char          *method, *query;
-    int                 method_len, query_len;
+    const char          *method, *query, *path;
+    int                 method_len, query_len, path_len;
     size_t              val_len;
     const char          *val;
     int                 ret;
@@ -55,6 +80,16 @@ TSRemapDoRemap(void* ih, TSHttpTxn rh, TSRemapRequestInfo *rri)
 
     method = TSHttpHdrMethodGet(rri->requestBufp, rri->requestHdrp, &method_len);
     if (method != TS_HTTP_METHOD_GET) {
+        return TSREMAP_NO_REMAP;
+    }
+
+    // check suffix
+    path = TSUrlPathGet(rri->requestBufp, rri->requestUrl, &path_len);
+
+    if (path == NULL || path_len <= 4) {
+        return TSREMAP_NO_REMAP;
+
+    } else if (strncasecmp(path + path_len - 4, ".mp4", 4) != 0) {
         return TSREMAP_NO_REMAP;
     }
 
@@ -253,7 +288,7 @@ mp4_add_transform(Mp4Context *mc, TSHttpTxn txnp)
 }
 
 static int
-mp4_transform_entry(TSCont contp, TSEvent event, void *edata)
+mp4_transform_entry(TSCont contp, TSEvent event, void* /* edata ATS_UNUSED */)
 {
     TSVIO        input_vio;
     Mp4Context   *mc = (Mp4Context*)TSContDataGet(contp);
@@ -480,4 +515,3 @@ ts_arg(const char *param, size_t param_len, const char *key, size_t key_len, siz
 
     return NULL;
 }
-

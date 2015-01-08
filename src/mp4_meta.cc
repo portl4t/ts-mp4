@@ -1,3 +1,20 @@
+/*
+  Licensed to the Apache Software Foundation (ASF) under one
+  or more contributor license agreements.  See the NOTICE file
+  distributed with this work for additional information
+  regarding copyright ownership.  The ASF licenses this file
+  to you under the Apache License, Version 2.0 (the
+  "License"); you may not use this file except in compliance
+  with the License.  You may obtain a copy of the License at
+
+  http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+*/
 
 #include "mp4_meta.h"
 
@@ -20,8 +37,8 @@ static mp4_atom_handler mp4_trak_atoms[] = {
     { "tkhd", &Mp4Meta::mp4_read_tkhd_atom },
     { "mdia", &Mp4Meta::mp4_read_mdia_atom },
     { NULL, NULL }
-};      
-    
+};
+
 static mp4_atom_handler mp4_mdia_atoms[] = {
     { "mdhd", &Mp4Meta::mp4_read_mdhd_atom },
     { "hdlr", &Mp4Meta::mp4_read_hdlr_atom },
@@ -108,10 +125,11 @@ Mp4Meta::mp4_meta_consume(int64_t size)
 int
 Mp4Meta::post_process_meta()
 {
-    off_t       start_offset, adjustment;
-    uint32_t    i, j;
-    int64_t     avail;
-    Mp4Trak     *trak;
+    off_t           start_offset, adjustment;
+    uint32_t        i, j;
+    int64_t         avail;
+    BufferHandle    *bh;
+    Mp4Trak         *trak;
 
     if (this->trak_num == 0) {
         return -1;
@@ -186,10 +204,11 @@ Mp4Meta::post_process_meta()
         if (start_offset > trak->start_offset)
             start_offset = trak->start_offset;
 
+        bh = &(trak->trak_atom);
         for (j = 0; j <= MP4_LAST_ATOM; j++) {
-            if (trak->out[j].buffer) {
-                TSIOBufferCopy(out_handle.buffer, trak->out[j].reader,
-                               TSIOBufferReaderAvail(trak->out[j].reader), 0);
+            if (bh[j].buffer) {
+                TSIOBufferCopy(out_handle.buffer, bh[j].reader,
+                               TSIOBufferReaderAvail(bh[j].reader), 0);
             }
         }
 
@@ -528,7 +547,7 @@ Mp4Meta::mp4_read_trak_atom(int64_t atom_header_size, int64_t atom_data_size)
 }
 
 int
-Mp4Meta::mp4_read_cmov_atom(int64_t atom_header_size, int64_t atom_data_size)
+Mp4Meta::mp4_read_cmov_atom(int64_t /*atom_header_size ATS_UNUSED */, int64_t /* atom_data_size ATS_UNUSED */)
 {
     return -1;
 }
@@ -538,11 +557,6 @@ Mp4Meta::mp4_read_tkhd_atom(int64_t atom_header_size, int64_t atom_data_size)
 {
     int64_t             atom_size;
     Mp4Trak             *trak;
-    mp4_tkhd_atom       *tkhd_atom;
-    mp4_tkhd64_atom     tkhd64_atom;
-
-    IOBufferReaderCopy(meta_reader, &tkhd64_atom, sizeof(mp4_tkhd64_atom));
-    tkhd_atom = (mp4_tkhd_atom*)&tkhd64_atom;
 
     atom_size = atom_header_size + atom_data_size;
 
@@ -564,10 +578,8 @@ Mp4Meta::mp4_read_tkhd_atom(int64_t atom_header_size, int64_t atom_data_size)
 int
 Mp4Meta::mp4_read_mdia_atom(int64_t atom_header_size, int64_t atom_data_size)
 {
-    int64_t             atom_size;
     Mp4Trak             *trak;
 
-    atom_size = atom_header_size + atom_data_size;
     trak = trak_vec[trak_num-1];
 
     trak->mdia_atom.buffer = TSIOBufferCreate();
@@ -718,10 +730,7 @@ Mp4Meta::mp4_read_dinf_atom(int64_t atom_header_size, int64_t atom_data_size)
 int
 Mp4Meta::mp4_read_stbl_atom(int64_t atom_header_size, int64_t atom_data_size)
 {
-    int64_t             atom_size;
     Mp4Trak             *trak;
-
-    atom_size = atom_data_size + atom_header_size;
 
     trak = trak_vec[trak_num-1];
 
@@ -1005,12 +1014,8 @@ Mp4Meta::mp4_read_co64_atom(int64_t atom_header_size, int64_t atom_data_size)
 }
 
 int
-Mp4Meta::mp4_read_mdat_atom(int64_t atom_header_size, int64_t atom_data_size)
+Mp4Meta::mp4_read_mdat_atom(int64_t /* atom_header_size ATS_UNUSED */, int64_t /* atom_data_size ATS_UNUSED */)
 {
-    int64_t     atom_size;
-
-    atom_size = atom_header_size + atom_data_size;
-
     mdat_atom.buffer = TSIOBufferCreate();
     mdat_atom.reader = TSIOBufferReaderAlloc(mdat_atom.buffer);
 
@@ -1897,4 +1902,3 @@ IOBufferReaderCopy(TSIOBufferReader readerp, void *buf, int64_t length)
 
     return n;
 }
-
