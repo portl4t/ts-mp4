@@ -37,9 +37,10 @@ map http://v.foo.com/ http://i.foo.com/ @plugin=/xx/libtsmp4.so
 **step3**: modify remap.config and restart the trafficserver
 
 ## Note
-It is not a good idea to cache a large mp4 file, as we have to generate new meta data if `start` exists, and it will take a long time to accomplish. As far as I know, many video sites will cut the large video file into many pieces, and each piece will be less than 70M(bytes), it will be a reasonable choice.
+It is not a good idea to cache a large mp4 file, as we have to generate new meta data if `start` exists, and it will take a long time to accomplish. As far as I know, many video sites will cut a large video file into many small mp4 files, and each small mp4 file will be less than 80M(bytes), it will be a reasonable choice.
 
 ## History
+* 2015-01-08, prepare to add to master
 * 2015-01-01, output from the last key sample if start time can not be reached
 * 2014-12-30, change TSIOBufferReaderCopy to IOBufferReaderCopy, support freebsd
 * 2014-12-29, fix integer overflow, support more than one stts entries.
